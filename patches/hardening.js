@@ -17,6 +17,19 @@
 
 const BLOCKED = new Set(['ignore-certificate-errors', 'no-sandbox', 'disable-gpu-sandbox']);
 
+// After the main window crashes, Eagle creates ~/.config/Eagle/DisableSandbox
+// and on every later launch tries to run without the sandbox. With no-sandbox
+// refused, that path ends in app.quit() and process.crash(), so one renderer
+// crash turned into Eagle never starting again. The flag is never honoured
+// here; remove it before Eagle reads it.
+try {
+  const disableSandboxFlag = require('path').join(require('os').homedir(), '.config', 'Eagle', 'DisableSandbox');
+  if (require('fs').existsSync(disableSandboxFlag)) {
+    require('fs').rmSync(disableSandboxFlag, { recursive: true, force: true });
+    console.warn(`[HARDENING] Removed ${disableSandboxFlag}; the sandbox stays on`);
+  }
+} catch (e) {}
+
 function normalise(name) {
   return String(name).replace(/^-+/, '').split('=')[0].toLowerCase();
 }
