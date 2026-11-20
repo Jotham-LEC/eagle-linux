@@ -37,6 +37,22 @@ test('the clock check runs curl with an argument vector', async () => {
   assert.deepEqual(fs.readFileSync(curlLog, 'utf8').trim().split('\n'), ['-s', '-I', '-X', 'POST', url]);
 });
 
+test('the trial check runs curl with an argument vector', async () => {
+  const url = 'http://120.79.10.37/check-trial-encrypted';
+  const id = '6affa588-c33d-19e4-8002-7f569160ea55';
+  const proc = child_process.spawn('powershell.exe', [`Remove-item alias:curl; curl -s POST '${url}' -F 'machineID=${id}'`]);
+  const { code } = await waitForSpawn(proc);
+  assert.equal(code, 0);
+  assert.deepEqual(fs.readFileSync(curlLog, 'utf8').trim().split('\n'), ['-s', '-X', 'POST', url, '-F', `machineID=${id}`]);
+});
+
+test('a trial check with anything but a machine ID is refused', async () => {
+  const proc = child_process.spawn('powershell.exe', [`Remove-item alias:curl; curl -s POST 'http://x/' -F 'machineID=1'; touch ${canary}; '`]);
+  const { err } = await waitForSpawn(proc);
+  assert.equal(err.code, 'ENOENT');
+  assert.equal(fs.existsSync(canary), false);
+});
+
 test('a clock check with shell syntax in the URL is refused', async () => {
   const proc = child_process.spawn('powershell.exe', [`Remove-item alias:curl; curl -s -I -X POST https://x/'; touch ${canary}; '`]);
   const { err } = await waitForSpawn(proc);
@@ -92,9 +108,19 @@ test('a file Eagle tamper-checks is read as it is on disk', () => {
   assert.equal(fs.readFileSync(runJs, 'utf8'), 'local copy');
 });
 
-test('Windows runtime-file probes are faked by name only', () => {
-  assert.equal(fs.existsSync('C:\\Windows\\System32\\ipv4_data_1.ldb'), true);
-  assert.equal(fs.existsSync(path.join(scratch, 'my-ipv4_data_1.ldb.bak')), false);
+test("Eagle's trial and licence state files are never faked", () => {
+  const ldb = path.join(scratch, 'ipv4_data_1.ldb');
+  const cert = path.join(scratch, 'Certifications');
+  assert.equal(fs.existsSync(ldb), false);
+  assert.equal(fs.existsSync(cert), false);
+  assert.throws(() => fs.readFileSync(cert), { code: 'ENOENT' });
+  fs.writeFileSync(cert, 'encrypted state');
+  assert.equal(fs.readFileSync(cert, 'utf8'), 'encrypted state');
+});
+
+test('Windows DLL presence checks are faked by suffix only', () => {
+  assert.equal(fs.existsSync('C:\\Windows\\System32\\vcruntime140.dll'), true);
+  assert.equal(fs.existsSync(path.join(scratch, 'notes.dll.txt')), false);
 });
 
 test('shortcut URLs name an action and nothing else', () => {

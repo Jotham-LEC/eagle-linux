@@ -49,20 +49,18 @@ function redirectHostsPath(p) {
   return p.replace(/\\/g, '/').toLowerCase() === WINDOWS_HOSTS ? '/etc/hosts' : p;
 }
 
-// Runtime-library and system-file presence checks (validateRuntime). Eagle
-// only tests that these exist; they are matched by file name, not substring.
-const WINDOWS_SYSTEM_FILE = /(^|[\\/])(ipv4_data_[12]\.ldb|Certifications)$/;
-
-function isWindowsSystemFile(p) {
-  return typeof p === 'string' && WINDOWS_SYSTEM_FILE.test(p);
-}
-
+// Windows runtime-library checks (validateRuntime) only test that DLLs exist.
+//
+// Eagle's own state files are deliberately NOT faked. /tmp/ipv4_data_1.ldb,
+// /tmp/ipv4_data_2.ldb and ~/.config/Eagle/Certifications hold Eagle's
+// encrypted trial and licence state; reporting them present and serving 64
+// zero bytes, as this file used to, leaves Eagle unable to read that state.
 function isDllPath(p) {
   return typeof p === 'string' && p.toLowerCase().endsWith('.dll');
 }
 
 function isFakedPath(p) {
-  return isWindowsSystemFile(p) || isDllPath(p);
+  return isDllPath(p);
 }
 
 // Dummy stat structure
@@ -117,16 +115,10 @@ fs.stat = function(p, ...args) {
 };
 
 fs.readFileSync = function(p, opts) {
-  if (isWindowsSystemFile(p)) return Buffer.alloc(64);
   return origFs.readFileSync.call(fs, redirectHostsPath(p), opts);
 };
 
 fs.readFile = function(p, ...args) {
-  if (isWindowsSystemFile(p)) {
-    const cb = args.find(a => typeof a === 'function');
-    if (cb) process.nextTick(() => cb(null, Buffer.alloc(64)));
-    return;
-  }
   return origFs.readFile.call(fs, redirectHostsPath(p), ...args);
 };
 
@@ -220,7 +212,6 @@ if (fs.promises) {
   const origPromises = { ...fs.promises };
   if (origPromises.readFile) {
     fs.promises.readFile = async function(p, opts) {
-      if (isWindowsSystemFile(p)) return Buffer.alloc(64);
       return origPromises.readFile.call(this, redirectHostsPath(p), opts);
     };
   }

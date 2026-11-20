@@ -87,12 +87,18 @@ const mediaNormalisedExecSync = child_process.execSync;
  *   - verifySystemClock (run.jsc):
  *       Remove-item alias:curl; curl -s -I -X POST <url>
  *                                           -> curl with an argument vector
+ *   - the trial check's last fallback (my_modules/curl-request, called from
+ *     the bytecode after the same request over Node has failed):
+ *       Remove-item alias:curl; curl -s POST '<url>' -F 'machineID=<guid>'
+ *                                           -> curl with an argument vector
  * -------------------------------------------------------------------------- */
 
 const { EventEmitter } = require('events');
 const { Readable, Writable } = require('stream');
 
-const CLOCK_CHECK = /^Remove-item alias:curl; curl -s -I -X POST (https?:\/\/[A-Za-z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~\/-]*)?)$/;
+const SAFE_URL = String.raw`https?:\/\/[A-Za-z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~\/-]*)?`;
+const CLOCK_CHECK = new RegExp(String.raw`^Remove-item alias:curl; curl -s -I -X POST (${SAFE_URL})$`);
+const TRIAL_CHECK = new RegExp(String.raw`^Remove-item alias:curl; curl -s (GET|POST) '(${SAFE_URL})' -F 'machineID=([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})'$`);
 
 function isPowerShell(file) {
   return typeof file === 'string' && /(^|[\\/])(powershell|pwsh)(\.exe)?$/i.test(file.trim().replace(/^["']|["']$/g, ''));
@@ -244,6 +250,12 @@ child_process.spawn = function(command, args, options) {
       return origSpawn.call(this, 'curl', ['-s', '-I', '-X', 'POST', clock[1]], options);
     }
 
+    const trial = TRIAL_CHECK.exec(script);
+    if (trial) {
+      logPowerShell('-> CURL (trial check)', script);
+      return origSpawn.call(this, 'curl', ['-s', '-X', trial[1], trial[2], '-F', `machineID=${trial[3]}`], options);
+    }
+
     logPowerShell('REFUSED (spawn)', script);
     return fakeProcess({ error: powerShellUnavailable(script) });
   }
@@ -259,5 +271,6 @@ child_process.spawn = function(command, args, options) {
 module.exports = {
   isPowerShell,
   resolveMediaBin,
-  CLOCK_CHECK
+  CLOCK_CHECK,
+  TRIAL_CHECK
 };
