@@ -73,9 +73,15 @@ const PATCHES = [
   },
   {
     file: 'my_modules/is-network-drive/main.js',
-    why: 'Every platform but macOS loads the Windows-only addon at require time.',
-    find: `if (process.platform !== 'darwin') {\n`,
-    replace: `if (process.platform === 'win32') {\n`,
+    why: 'Every platform but macOS loads the Windows-only addon at require time; Linux loads none.',
+    find:
+      `if (process.platform !== 'darwin') {\n` +
+      `    addon = require('bindings')('windows-x64.node');\n` +
+      `} else {\n`,
+    replace:
+      `if (process.platform === 'win32') {\n` +
+      `    addon = require('bindings')('windows-x64.node');\n` +
+      `} else if (process.platform === 'darwin') {\n`,
   },
   {
     file: 'my_modules/is-network-drive/main.js',
