@@ -869,13 +869,37 @@ if (electron && electron.BrowserWindow) {
     'setVibrancy', 'setOpacity', 'setRepresentedFilename', 'setDocumentEdited',
     'setProgressBar', 'setTouchBar', 'setWindowButtonVisibility', 'setAppDetails',
     'setUserTasks', 'setShape', 'setThumbnailClip', 'setThumbnailToolTip', 'setSheetOffset',
-    'setIcon', 'removeWorkSpace', 'hookWindowMessage', 'unhookWindowMessage'
+    'setIcon', 'removeWorkSpace', 'hookWindowMessage', 'unhookWindowMessage',
+    'setTrafficLightPosition'
   ];
   bwMethods.forEach(method => {
     if (typeof electron.BrowserWindow.prototype[method] !== 'function') {
       electron.BrowserWindow.prototype[method] = createCallableProxy();
     }
   });
+}
+
+// nativeImage.createThumbnailFromPath is Windows/macOS only. Eagle's main
+// process calls it for every RAW import, from bytecode compiled with bytenode:
+// when such a call hits a missing function, V8 re-parses the caller to word the
+// TypeError, finds bytenode's placeholder source, and aborts the whole process
+// (SIGTRAP in Parser::DoParseFunction). Return what Chromium can decode, scaled
+// to fit; an empty image sends Eagle on to its own dcraw decoder.
+if (electron && electron.nativeImage && typeof electron.nativeImage.createThumbnailFromPath !== 'function') {
+  electron.nativeImage.createThumbnailFromPath = async function (filePath, size) {
+    let img = electron.nativeImage.createEmpty();
+    try {
+      img = electron.nativeImage.createFromPath(String(filePath));
+    } catch (e) {}
+    if (img.isEmpty()) return img;
+    const { width, height } = img.getSize();
+    const maxW = (size && size.width) || width;
+    const maxH = (size && size.height) || height;
+    const scale = Math.min(1, maxW / width, maxH / height);
+    return scale < 1
+      ? img.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) })
+      : img;
+  };
 }
 
 // SystemPreferences stubs
