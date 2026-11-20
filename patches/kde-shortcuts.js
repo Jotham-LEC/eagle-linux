@@ -14,8 +14,12 @@ try {
 const isMainProcess = !process.type || process.type === 'browser';
 const eagleStubsDir = path.resolve(__dirname, '..');
 
+function isKde() {
+  return /kde/i.test(process.env.XDG_CURRENT_DESKTOP || '') || process.env.KDE_FULL_SESSION === 'true';
+}
+
 function initKdePlasmaShortcutsInternal() {
-  if (!isMainProcess || (process.platform !== 'linux' && os.platform() !== 'linux')) {
+  if (!isMainProcess || (process.platform !== 'linux' && os.platform() !== 'linux') || !isKde()) {
     return;
   }
 

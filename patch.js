@@ -2,7 +2,7 @@
  * Eagle Linux Compatibility Layer - Master Entry Point
  *
  * All compatibility patches are organized into dedicated modules under `./patches/`:
- *  - patches/anti-tamper.js        : MD5 crypto anti-tamper overrides
+ *  - patches/hardening.js          : drops Eagle's TLS- and sandbox-disabling switches
  *  - patches/tray-icon.js          : Linux PNG NativeImage & Tray wrapper
  *  - patches/environment.js        : Windows env fallbacks, GTK/GSettings, ffmpeg wrappers
  *  - patches/fs-patches.js         : File system hooks, EXDEV rename fallback & dummy files
@@ -17,6 +17,9 @@
  *  - patches/renderer-fixes.js     : Renderer-only window.ig & body display fixes
  *  - patches/ai-search.js          : AI Search plugin Linux compatibility
  *  - patches/kde-shortcuts.js      : KDE Plasma KGlobalAccel global shortcuts
+ *  - patches/sway-shortcuts.js     : eagle://shortcut/<action> for compositor key bindings
+ *  - patches/linux-screenshot.js   : grim/slurp on wlroots, the XDG portal elsewhere
+ *  - patches/error-reporting.js    : uncaught errors to stderr and a log file
  *
  * See patches/index.js for the (significant) load order.
  */

@@ -34,17 +34,35 @@ try {
   }
 } catch (e) {}
 
-// Path matching logic for Windows system files & DLLs
-function isHostPath(p) {
-  if (!p) return false;
-  const str = String(p).toLowerCase();
-  return str.startsWith('c:') || str.includes('system32') || str.includes('drivers') || str.includes('hosts');
+// Windows paths Eagle probes at startup.
+//
+// Eagle reads the Windows hosts file on every platform but macOS, looking for
+// its licence servers redirected to localhost. Point that one path at the real
+// /etc/hosts, so the check reads the same file it reads on macOS. Nothing else
+// is redirected: matching on substrings such as "hosts" or "drivers" used to
+// hand user files like ~/Pictures/ghosts.png a fake hosts file and drop writes
+// to anything under a folder called Drivers.
+const WINDOWS_HOSTS = 'c:/windows/system32/drivers/etc/hosts';
+
+function redirectHostsPath(p) {
+  if (typeof p !== 'string') return p;
+  return p.replace(/\\/g, '/').toLowerCase() === WINDOWS_HOSTS ? '/etc/hosts' : p;
+}
+
+// Runtime-library and system-file presence checks (validateRuntime). Eagle
+// only tests that these exist; they are matched by file name, not substring.
+const WINDOWS_SYSTEM_FILE = /(^|[\\/])(ipv4_data_[12]\.ldb|Certifications)$/;
+
+function isWindowsSystemFile(p) {
+  return typeof p === 'string' && WINDOWS_SYSTEM_FILE.test(p);
 }
 
 function isDllPath(p) {
-  if (!p) return false;
-  const str = String(p).toLowerCase();
-  return str.endsWith('.dll') || str.includes('.dll');
+  return typeof p === 'string' && p.toLowerCase().endsWith('.dll');
+}
+
+function isFakedPath(p) {
+  return isWindowsSystemFile(p) || isDllPath(p);
 }
 
 // Dummy stat structure
@@ -63,179 +81,53 @@ const dummyStat = {
   birthtime: new Date()
 };
 
-const backupAppBundle = path.join(eagleStubsDir, 'backup/old_app_versions/3/app.bundle.js');
-const backupIndexHtml = path.join(eagleStubsDir, 'backup/old_app_versions/3/index.html');
-const backupRunJs = path.join(eagleStubsDir, 'backup/old_app_versions/3/app/run.js');
-
-// Pristine run.js contents, CRLF-terminated with no trailing newline.
-// This exact byte sequence hashes to f9a77da6177275249fb3ab3a9bc9e799 --
-// the value Eagle's tamper check expects. Do not "normalise" the line
-// endings or append a trailing newline; that changes the digest.
-const untamperedRunJsBuffer = Buffer.from(
-  '636f6e737420627974656e6f6465203d20726571756972652827627974656e6f646527293b0d0a636f6e7374207638203d20726571756972652827763827293b0d0a76382e736574466c61677346726f6d537472696e6728272d2d6e6f2d6c617a7927293b0d0a72657175697265285f5f6469726e616d65202b20272f72756e2e6a736327293b0d0a72657175697265285f5f6469726e616d65202b20272f6d61696e2e6a736327293b',
-  'hex'
-);
-
-function parseEncoding(opts) {
-  if (!opts) return null;
-  if (typeof opts === 'string') return opts;
-  if (typeof opts === 'object' && opts.encoding) return opts.encoding;
-  return null;
-}
-
-// Hook fs existence, access, stat, read, open for Windows paths and DLL checks
 fs.existsSync = function(p) {
-  if (typeof p === 'string' && (p.includes('ipv4_data') || p.includes('Certifications'))) return true;
-  if (typeof p === 'string' && (p.endsWith('DisableEdge') || p.includes('DisableEdge'))) return true;
-  if (typeof p === 'string' && (p.includes('edge_coreclr') || p.includes('edge_nativeclr') || p.includes('electron-edge-js'))) return true;
+  if (typeof p === 'string' && (p.endsWith('DisableEdge') || p.includes('edge_coreclr') || p.includes('edge_nativeclr') || p.includes('electron-edge-js'))) return true;
   if (typeof p === 'string' && (p.includes('NiuniuCapture.exe') || p.includes('NiuniuCapture.dll'))) return true;
-  if (isHostPath(p) || isDllPath(p)) return true;
-  return origFs.existsSync.apply(this, arguments);
+  if (isFakedPath(p)) return true;
+  return origFs.existsSync.call(this, redirectHostsPath(p));
 };
 
 fs.accessSync = function(p, mode) {
-  if (typeof p === 'number' || (typeof p !== 'string' && !Buffer.isBuffer(p) && !(p instanceof URL))) {
-    return undefined;
-  }
-  if (typeof p === 'string' && (p.includes('ipv4_data') || p.includes('Certifications'))) return undefined;
-  if (isHostPath(p) || isDllPath(p)) return undefined;
-  return origFs.accessSync.apply(this, arguments);
+  if (isFakedPath(p)) return undefined;
+  return origFs.accessSync.call(this, redirectHostsPath(p), mode);
 };
 
 fs.access = function(p, ...args) {
   const cb = args.find(a => typeof a === 'function');
-  if (typeof p === 'number' || (typeof p !== 'string' && !Buffer.isBuffer(p) && !(p instanceof URL))) {
+  if (isFakedPath(p)) {
     if (cb) process.nextTick(() => cb(null));
     return;
   }
-  if (typeof p === 'string' && (p.includes('ipv4_data') || p.includes('Certifications'))) {
-    if (cb) process.nextTick(() => cb(null));
-    return;
-  }
-  if (isHostPath(p) || isDllPath(p)) {
-    if (cb) process.nextTick(() => cb(null));
-    return;
-  }
-  return origFs.access.apply(this, [p, ...args]);
+  return origFs.access.call(this, redirectHostsPath(p), ...args);
 };
 
 fs.statSync = function(p, opts) {
-  if (typeof p === 'string' && (p.includes('ipv4_data') || p.includes('Certifications'))) return dummyStat;
-  if (typeof p === 'string' && p.includes('app.bundle.js')) {
-    const stat = origFs.statSync.call(this, p, opts);
-    return Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { size: 4408963 });
-  }
-  if (isHostPath(p) || isDllPath(p)) return dummyStat;
-  return origFs.statSync.apply(this, arguments);
+  if (isFakedPath(p)) return dummyStat;
+  return origFs.statSync.call(this, redirectHostsPath(p), opts);
 };
 
 fs.stat = function(p, ...args) {
   const cb = args.find(a => typeof a === 'function');
-  if (typeof p === 'string' && (p.includes('ipv4_data') || p.includes('Certifications'))) {
+  if (isFakedPath(p)) {
     if (cb) process.nextTick(() => cb(null, dummyStat));
     return;
   }
-  if (isHostPath(p) || isDllPath(p)) {
-    if (cb) process.nextTick(() => cb(null, dummyStat));
-    return;
-  }
-  return origFs.stat.apply(this, args);
+  return origFs.stat.call(this, redirectHostsPath(p), ...args);
 };
 
 fs.readFileSync = function(p, opts) {
-  if (typeof p === 'string' && (p.includes('ipv4_data') || p.includes('Certifications'))) {
-    console.log('[STUBS FS] Serving dummy data for ipv4_data/Certifications:', p);
-    return Buffer.alloc(64);
-  }
-  if (typeof p === 'string' && !p.includes('stubs')) {
-    if ((p.endsWith('run.js') || p.endsWith('/run.js') || p.endsWith('\\run.js')) && !p.endsWith('.jsc')) {
-      console.log('[STUBS FS] Intercepted readFileSync for run.js tamper check on:', p);
-      const enc = parseEncoding(opts);
-      const res = origFs.existsSync(backupRunJs) ? origFs.readFileSync.call(fs, backupRunJs) : untamperedRunJsBuffer;
-      return enc ? res.toString(enc) : res;
-    }
-
-    if (p.includes('app.bundle.js')) {
-      console.log('[STUBS FS] Intercepted readFileSync for app.bundle.js tamper check on:', p);
-      const enc = parseEncoding(opts);
-      if (origFs.existsSync(backupAppBundle)) {
-        const b = origFs.readFileSync.call(fs, backupAppBundle);
-        return enc ? b.toString(enc) : b;
-      }
-    }
-
-    if ((p.endsWith('index.html') || p.endsWith('/index.html') || p.endsWith('\\index.html')) && !p.includes('node_modules')) {
-      console.log('[STUBS FS] Intercepted readFileSync for index.html tamper check on:', p);
-      const enc = parseEncoding(opts);
-      if (origFs.existsSync(backupIndexHtml)) {
-        const b = origFs.readFileSync.call(fs, backupIndexHtml);
-        return enc ? b.toString(enc) : b;
-      }
-    }
-  }
-
-  if (isHostPath(p)) {
-    return '127.0.0.1 localhost\n::1 localhost\n';
-  }
-
-  return origFs.readFileSync.apply(fs, arguments);
+  if (isWindowsSystemFile(p)) return Buffer.alloc(64);
+  return origFs.readFileSync.call(fs, redirectHostsPath(p), opts);
 };
 
 fs.readFile = function(p, ...args) {
-  const cb = args.find(a => typeof a === 'function');
-  const opts = args.find(a => typeof a === 'string' || (a && typeof a === 'object'));
-  if (typeof p === 'string' && !p.includes('stubs')) {
-    if (p.endsWith('run.js') || p.endsWith('/run.js') || p.endsWith('\\run.js')) {
-      console.log('[STUBS FS] Intercepted readFile for run.js tamper check on:', p);
-      const enc = parseEncoding(opts);
-      const res = origFs.existsSync(backupRunJs) ? origFs.readFileSync.call(fs, backupRunJs) : untamperedRunJsBuffer;
-      const formatted = enc ? res.toString(enc) : res;
-      if (cb) process.nextTick(() => cb(null, formatted));
-      return;
-    }
-
-    if (p.includes('app.bundle.js')) {
-      console.log('[STUBS FS] Intercepted readFile for app.bundle.js tamper check on:', p);
-      const enc = parseEncoding(opts);
-      if (origFs.existsSync(backupAppBundle)) {
-        const b = origFs.readFileSync.call(fs, backupAppBundle);
-        const formatted = enc ? b.toString(enc) : b;
-        if (cb) process.nextTick(() => cb(null, formatted));
-        return;
-      }
-    }
-
-    if (p.endsWith('index.html') || p.endsWith('/index.html') || p.endsWith('\\index.html')) {
-      console.log('[STUBS FS] Intercepted readFile for index.html tamper check on:', p);
-      const enc = parseEncoding(opts);
-      if (origFs.existsSync(backupIndexHtml)) {
-        const b = origFs.readFileSync.call(fs, backupIndexHtml);
-        const formatted = enc ? b.toString(enc) : b;
-        if (cb) process.nextTick(() => cb(null, formatted));
-        return;
-      }
-    }
-  }
-
-  if (isHostPath(p)) {
-    if (cb) process.nextTick(() => cb(null, '127.0.0.1 localhost\n::1 localhost\n'));
+  if (isWindowsSystemFile(p)) {
+    const cb = args.find(a => typeof a === 'function');
+    if (cb) process.nextTick(() => cb(null, Buffer.alloc(64)));
     return;
   }
-  return origFs.readFile.apply(fs, arguments);
-};
-
-fs.writeFileSync = function(p, data, opts) {
-  if (isHostPath(p)) return undefined;
-  return origFs.writeFileSync.call(fs, p, data, opts);
-};
-
-fs.writeFile = function(p, ...args) {
-  const cb = args.find(a => typeof a === 'function');
-  if (isHostPath(p)) {
-    if (cb) process.nextTick(() => cb(null));
-    return;
-  }
-  return origFs.writeFile.call(fs, p, ...args);
+  return origFs.readFile.call(fs, redirectHostsPath(p), ...args);
 };
 
 // Cross-filesystem / EXDEV fallback for fs.renameSync, fs.rename, and fs.promises.rename
@@ -328,20 +220,20 @@ if (fs.promises) {
   const origPromises = { ...fs.promises };
   if (origPromises.readFile) {
     fs.promises.readFile = async function(p, opts) {
-      if (isHostPath(p)) return '127.0.0.1 localhost\n::1 localhost\n';
-      return origPromises.readFile.apply(this, arguments);
+      if (isWindowsSystemFile(p)) return Buffer.alloc(64);
+      return origPromises.readFile.call(this, redirectHostsPath(p), opts);
     };
   }
   if (origPromises.access) {
     fs.promises.access = async function(p, mode) {
-      if (isHostPath(p) || isDllPath(p)) return undefined;
-      return origPromises.access.apply(this, arguments);
+      if (isFakedPath(p)) return undefined;
+      return origPromises.access.call(this, redirectHostsPath(p), mode);
     };
   }
   if (origPromises.stat) {
     fs.promises.stat = async function(p, opts) {
-      if (isHostPath(p) || isDllPath(p)) return dummyStat;
-      return origPromises.stat.apply(this, arguments);
+      if (isFakedPath(p)) return dummyStat;
+      return origPromises.stat.call(this, redirectHostsPath(p), opts);
     };
   }
   if (origPromises.copyFile) {
@@ -361,7 +253,7 @@ if (fs.promises) {
 
 module.exports = {
   origFs,
-  isHostPath,
+  redirectHostsPath,
   isDllPath,
   dummyStat
 };

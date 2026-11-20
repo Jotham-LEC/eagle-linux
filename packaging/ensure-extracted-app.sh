@@ -91,6 +91,8 @@ if [ -d "${REPO_DIR}/app_patches" ]; then
         echo "[INFO] Overlaying app_patches..."
         cp -r "${REPO_DIR}/app_patches/." "${REPO_DIR}/app/"
     fi
+    # Eagle's own files are edited in place rather than shipped in app_patches.
+    node "${REPO_DIR}/pristine-patches.js" "${REPO_DIR}/app"
 else
     # Skipping this silently produces a package that builds and installs
     # fine but ships upstream's Windows screen-capture.js, so screenshots

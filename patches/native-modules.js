@@ -95,7 +95,9 @@ Module._load = function(request, parent, isMain) {
       return linuxWinClipboard;
     }
 
-    if (lowerReq.includes('electron-edge-js') || lowerReq.includes('edge') || lowerReq.includes('edge_coreclr') || lowerReq === 'edge_coreclr.node') {
+    // The .NET bridge only. A bare includes('edge') also caught any module
+    // whose name merely contains the word (knowledge, hedge, ...).
+    if (/(^|[\/])(electron-edge-js|edge-cs|edge)([\/.]|$)|edge_(coreclr|nativeclr)/.test(lowerReq)) {
       console.log(`[STUBS] Intercepted edge module load: ${request}`);
       const dummyEdgeFunc = function() {
         const asyncFn = function(data, cb) {

@@ -22,5 +22,6 @@ rm -rf ./app.asar.unpacked ./app.asar "$INSTALLER_EXE"
 echo "Extraction complete. Installing patch files..."
 
 cp -r ./app_patches/. ./app/
+node ./pristine-patches.js ./app
 
 echo "Patching complete."

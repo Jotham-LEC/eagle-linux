@@ -3,7 +3,7 @@
  *
  * Load order mirrors stubs.js and is significant:
  *
- *  - anti-tamper must patch crypto before Eagle computes any digest.
+ *  - hardening must wrap app.commandLine before Eagle appends its switches.
  *  - environment must run before fs-patches: it defines process.env.ProgramData
  *    (used to seed the edge-cs.dll stub) and installs the path.join/resolve
  *    guards that tolerate undefined Windows env vars.
@@ -12,8 +12,10 @@
  *  - native-modules must precede window-manager, which uses createCallableProxy.
  */
 
-// 1. Anti-tamper & crypto hooks
-const antiTamper = require('./anti-tamper');
+// 1. Drop the Chromium switches that turn off TLS checks and the sandbox.
+//    (There is no anti-tamper hook: pristine-patches.js leaves every file
+//    Eagle hashes untouched, and the build verifies that.)
+const hardening = require('./hardening');
 
 // 2. Linux PNG NativeImage / Tray icon resolution
 const trayIcon = require('./tray-icon');
@@ -45,21 +47,22 @@ const dragOut = require('./drag-out');
 // 11. Renderer-only fixes (no-op in the main process)
 const rendererFixes = require('./renderer-fixes');
 
-// 12. Dynamically-installed plugin patches & desktop integration
-const aiSearch = require('./ai-search');
+// 12. Dynamically-installed plugin patches & desktop integration.
+//     AI Search rewrites plugin code downloaded into ~/.config/Eagle/Plugins,
+//     so it only loads when the package was built with enableAiSearch.
+const aiSearch = process.env.EAGLE_LINUX_AI_SEARCH === '1' ? require('./ai-search') : null;
 const kdeShortcuts = require('./kde-shortcuts');
+const swayShortcuts = require('./sway-shortcuts');
 
-process.on('uncaughtException', (err) => {
-  console.log('[UNCAUGHT EXCEPTION SUPPRESSED]', err.stack || err);
-});
-process.on('unhandledRejection', (reason, promise) => {
-  console.log('[UNHANDLED REJECTION SUPPRESSED]', reason);
-});
+// 13. Errors stay visible. Any listener keeps Node from exiting, as the old
+//     "SUPPRESSED" handlers did, but each error is now written with its stack
+//     to stderr and to ~/.config/Eagle/eagle-linux-errors.log.
+const errorReporting = require('./error-reporting');
 
 console.log(`[PATCHES MASTER] Eagle Linux Compatibility Layer successfully initialized (process.type: ${process.type || 'main'}).`);
 
 module.exports = {
-  antiTamper,
+  hardening,
   trayIcon,
   environment,
   fsPatches,
@@ -71,5 +74,7 @@ module.exports = {
   dragOut,
   rendererFixes,
   aiSearch,
-  kdeShortcuts
+  kdeShortcuts,
+  swayShortcuts,
+  errorReporting
 };

@@ -1,5 +1,5 @@
 { pkgs ? import <nixpkgs> { config.allowUnfree = true; }
-, enableAiSearch ? true
+, enableAiSearch ? false # pulls in torch; also lets ai-search.js rewrite downloaded plugin code
 , gpuBackend ? "cpu" # Options: "cuda" (NVIDIA NVENC/CUDA), "rocm" (AMD ROCm), "cpu" (CPU-only)
 }:
 
@@ -174,6 +174,7 @@ let
       pkgs.shared-mime-info
       pkgs.imagemagick
       pkgs.python3
+      pkgs.nodejs
     ];
 
     desktopItems = [
@@ -210,6 +211,14 @@ let
     ] ++ (if enableAiSearch then [ aiPythonEnv ] else []);
 
     dontBuild = true;
+
+    # Hook regression tests: PowerShell allowlist, fs path matching.
+    doCheck = true;
+    checkPhase = ''
+      runHook preCheck
+      node --test tests/*.test.js
+      runHook postCheck
+    '';
 
     installPhase = ''
       runHook preInstall
@@ -252,6 +261,11 @@ let
           ./app_patches/. \
           "$out/share/eagle/app/"
       fi
+
+      # Eagle's own files are edited in place, never copied from this repo.
+      # Fails the build if any edit does not match exactly once, or if a file
+      # Eagle tamper-checks no longer has its original digest.
+      node ./pristine-patches.js "$out/share/eagle/app"
 
       eagle_assets="$out/share/eagle/app/assets"
 
@@ -327,13 +341,6 @@ EOF
         cp "$out/share/eagle/app/assets/icon.png" "$out/share/pixmaps/eagle.png"
       fi
 
-      # Install udev rule allowing unprivileged access to DMI product_uuid
-      mkdir -p "$out/lib/udev/rules.d"
-      cat << 'EOF' > "$out/lib/udev/rules.d/99-eagle-dmi.rules"
-# Allow unprivileged read access to DMI product_uuid for Eagle Machine ID detection
-SUBSYSTEM=="dmi", KERNEL=="product_uuid", MODE="0444"
-EOF
-
       # Expose the runtime at the same share/eagle/electron path the Arch,
       # Fedora and AppImage launchers probe. The Nix wrapper below calls the
       # store path directly, so this is purely for layout consistency across
@@ -342,8 +349,8 @@ EOF
       ln -sf ${electron22}/libexec/electron/electron "$out/share/eagle/electron/electron"
 
       makeWrapper ${electron22}/bin/electron "$out/bin/eagle" \
-        --add-flags "-r $out/share/eagle/patch.js $out/share/eagle/app --no-sandbox --ozone-platform-hint=auto" \
-        --set GTK_USE_PORTAL "1" \
+        --add-flags "-r $out/share/eagle/patch.js $out/share/eagle/app --ozone-platform-hint=auto" \
+        --set GTK_USE_PORTAL "1" ${pkgs.lib.optionalString enableAiSearch "--set EAGLE_LINUX_AI_SEARCH 1"} \
         --prefix NODE_PATH : "$out/share/eagle/app/node_modules" \
         --prefix XDG_DATA_DIRS : "${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}" \
         --prefix PATH : "${pkgs.lib.makeBinPath (
@@ -358,7 +365,11 @@ EOF
             # execute. Putting exiv2 on PATH lets that binary be replaced with
             # a wrapper, the same way ffmpeg-full serves the video plugin.
             pkgs.exiv2
-            (if pkgs ? kstart then pkgs.kstart else pkgs.kdePackages.kstart)
+            # Screenshots on wlroots compositors (patches/linux-screenshot.js).
+            pkgs.grim
+            pkgs.slurp
+            # Eagle's clock check (patches/process-execution.js).
+            pkgs.curl
           ]
           ++ (if enableAiSearch then [ aiPythonEnv ] else [])
         )}" \

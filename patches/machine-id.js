@@ -12,14 +12,11 @@ function formatAsGuid(str) {
   return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20, 32)}`.toLowerCase();
 }
 
+// The licence is bound to this ID. /etc/machine-id is readable without root
+// and inside a sandbox, so it is the one source; DMI product_uuid (root-only
+// unless a udev rule loosens it) would give a different ID depending on where
+// Eagle runs, and lose the activation.
 function getSystemMachineId() {
-  try {
-    if (origFs.existsSync('/sys/class/dmi/id/product_uuid')) {
-      const uuid = origFs.readFileSync('/sys/class/dmi/id/product_uuid', 'utf8').trim();
-      if (uuid && uuid.length >= 32) return formatAsGuid(uuid);
-    }
-  } catch (e) {}
-
   try {
     if (origFs.existsSync('/etc/machine-id')) {
       const mid = origFs.readFileSync('/etc/machine-id', 'utf8').trim();
