@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>cool.eagle.Eagle</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+
+  <name>Eagle</name>
+  <summary>Digital asset manager for designers</summary>
+
+  <description>
+    <p>
+      Eagle is a digital asset management tool that helps designers collect,
+      search, and organize design assets in one place. It handles images,
+      video, audio, fonts and 3D files, with tagging, colour search, folders
+      and smart filters.
+    </p>
+    <p>
+      This is an unofficial community port that runs the upstream Eagle
+      application on Linux through a compatibility layer. It is not produced
+      or supported by the Eagle developers. A valid Eagle licence is required.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Organise assets with folders, tags, ratings and smart folders</li>
+      <li>Search by colour, shape, format, dimensions or annotation</li>
+      <li>Preview images, video, audio, fonts and documents</li>
+      <li>Extend the app with community plugins</li>
+    </ul>
+  </description>
+
+  <categories>
+    <category>Graphics</category>
+    <category>Photography</category>
+    <category>Viewer</category>
+  </categories>
+
+  <keywords>
+    <keyword>asset</keyword>
+    <keyword>design</keyword>
+    <keyword>images</keyword>
+    <keyword>tagging</keyword>
+    <keyword>moodboard</keyword>
+    <keyword>reference</keyword>
+  </keywords>
+
+  <url type="homepage">https://eagle.cool</url>
+  <url type="bugtracker">https://github.com/Naitrate/Eagle-Linux/issues</url>
+  <url type="help">https://github.com/Naitrate/Eagle-Linux</url>
+
+  <developer id="cool.eagle">
+    <name>Eagle</name>
+  </developer>
+
+  <launchable type="desktop-id">eagle.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/Naitrate/Eagle-Linux/master/docs/screenshots/01-library.png</image>
+      <caption>Browsing a library of images, artwork and design assets</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Naitrate/Eagle-Linux/master/docs/screenshots/02-inspector.png</image>
+      <caption>Inspecting an item's tags, colours and metadata</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Naitrate/Eagle-Linux/master/docs/screenshots/03-search.png</image>
+      <caption>Filtering the library by tag, colour or shape</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Naitrate/Eagle-Linux/master/docs/screenshots/04-preview.png</image>
+      <caption>Previewing a full-resolution image</caption>
+    </screenshot>
+  </screenshots>
+
+  <provides>
+    <binary>eagle</binary>
+  </provides>
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+
+  <!-- Eagle is an offline asset manager; nothing here warrants an age rating. -->
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="4.1.0" date="2026-11-17">
+      <description>
+        <p>
+          Runs natively on Wayland, and copying and dragging files out of
+          Eagle now work.
+        </p>
+        <ul>
+          <li>Ctrl+C on items puts the files on the system clipboard, and
+          files copied in a file manager paste into Eagle.</li>
+          <li>Items can be dragged out to file managers and native Wayland
+          apps such as Dolphin, Nautilus and PureRef, always as a copy.
+          Wine applications do not accept these drops yet.</li>
+          <li>Eagle runs as a native Wayland client on Wayland sessions,
+          with workarounds for Electron cursor bugs that crashed it there.</li>
+          <li>The system tray entry is now named.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="4.0.6" date="2026-09-03">
+      <description>
+        <p>
+          Makes the media tools Eagle relies on available in every package.
+          The AppImage now carries ffmpeg and exiv2 with it instead of
+          expecting the host to provide them.
+        </p>
+      </description>
+    </release>
+    <release version="4.0.5" date="2026-09-02">
+      <description>
+        <p>
+          Fixes videos and other plugin-backed formats getting stuck on
+          &quot;importing&quot;. Thumbnails for video, HEIC, JXL, RAW, 3D, HDR
+          and vector files now generate instead of hanging.
+        </p>
+      </description>
+    </release>
+    <release version="4.0.4" date="2026-09-02">
+      <description>
+        <p>
+          Keeps the &quot;start hidden&quot; option when launching at login on
+          rpm, Arch and Nix installs.
+        </p>
+      </description>
+    </release>
+    <release version="4.0.3" date="2026-09-02">
+      <description>
+        <p>
+          Stops imported and renamed items being called &quot;_&quot;, gets the
+          Flatpak launching, fixes launching at login, and fixes the main
+          window failing to open on a clean install.
+        </p>
+      </description>
+    </release>
+    <release version="4.0.2" date="2026-09-02">
+      <description>
+        <p>
+          Bundles the Electron runtime with the package instead of fetching it
+          at first launch, restores the main window controls, and fixes the
+          packaging of the Linux compatibility layer.
+        </p>
+      </description>
+    </release>
+    <release version="4.0.1" date="2026-09-01"/>
+    <release version="4.0.0" date="2026-09-01"/>
+  </releases>
+</component>

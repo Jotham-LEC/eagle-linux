@@ -1,0 +1,140 @@
+# Maintainer: Bryce
+pkgname=eagle-bin
+pkgver=4.1.0
+pkgrel=1
+pkgdesc="Digital asset manager for designers (Linux Port)"
+arch=('x86_64')
+url="https://eagle.cool"
+license=('custom')
+depends=('python' 'zstd' 'xdotool' 'ffmpeg' 'exiv2' 'shared-mime-info')
+makedepends=('curl' 'unzip')
+provides=('eagle')
+conflicts=('eagle')
+
+package() {
+    # Reference repository root directory relative to PKGBUILD location
+    local REPO_DIR="$(cd "$startdir/../.." && pwd)"
+    bash "$REPO_DIR/packaging/ensure-extracted-app.sh"
+
+    # Install application files
+    install -d "$pkgdir/usr/share/eagle"
+    cp -r "$REPO_DIR/app" "$pkgdir/usr/share/eagle/"
+    # AppStream metadata for software centres (Discover, GNOME Software)
+    install -Dm644 "$REPO_DIR/packaging/eagle.metainfo.xml" \
+        "$pkgdir/usr/share/metainfo/cool.eagle.Eagle.metainfo.xml"
+
+    install -Dm644 "$REPO_DIR/patch.js" "$pkgdir/usr/share/eagle/patch.js"
+    cp -r "$REPO_DIR/patches" "$pkgdir/usr/share/eagle/"
+
+    # Bundle the Electron runtime rather than bootstrapping it via npx at
+    # first launch (npm >= 12 / Node >= 26 break that path).
+    bash "$REPO_DIR/packaging/ensure-electron.sh" "$pkgdir/usr/share/eagle/electron"
+
+    # Install launcher wrapper
+    install -d "$pkgdir/usr/bin"
+    cat << 'EOF' > "$pkgdir/usr/bin/eagle"
+#!/bin/sh
+export GTK_USE_PORTAL=1
+export NODE_PATH="/usr/share/eagle/app/node_modules:${NODE_PATH:-}"
+
+PATCH="/usr/share/eagle/patch.js"
+APP="/usr/share/eagle/app"
+
+# Prefer the Electron bundled with this package. Bootstrapping via npx is
+# unreliable on current distros (npm >= 12 blocks install scripts; Node >= 26
+# breaks Electron's extract-zip), so it is only a fallback now.
+ELECTRON_BIN=""
+for candidate in /usr/share/eagle/electron/electron /app/electron/electron; do
+    if [ -x "${candidate}" ]; then
+        ELECTRON_BIN="${candidate}"
+        break
+    fi
+done
+
+if [ -n "${ELECTRON_BIN}" ]; then
+    :
+elif command -v electron22 >/dev/null 2>&1; then
+    ELECTRON_BIN="$(command -v electron22)"
+elif command -v npx >/dev/null 2>&1; then
+    # Prime the npx cache before healing it. npm >= 12 blocks postinstall
+    # scripts via its allowScripts policy and --ignore-scripts=false no longer
+    # overrides that, so this first call may leave electron unpacked but
+    # without its binary. The heal loop below then runs install.js directly.
+    # Without priming, a cold cache has nothing to heal and the launch fails.
+    npx --yes --ignore-scripts=false electron@22.3.7 --version >/dev/null 2>&1 || true
+    for cache_dir in "${HOME}/.npm/_npx/"*/node_modules/electron; do
+        if [ -d "${cache_dir}" ] && [ ! -f "${cache_dir}/path.txt" ]; then
+            if [ -f "${cache_dir}/install.js" ]; then
+                (cd "${cache_dir}" && node install.js 2>/dev/null || true)
+            fi
+            if [ ! -f "${cache_dir}/path.txt" ]; then
+                rm -rf "${cache_dir%/*/*}" 2>/dev/null || true
+            fi
+        fi
+    done
+    ELECTRON_BIN="npx --yes --ignore-scripts=false electron@22.3.7"
+elif command -v electron >/dev/null 2>&1; then
+    ELECTRON_BIN="$(command -v electron)"
+else
+    echo "[ERROR] No Electron runtime found. Please install nodejs and npm."
+    exit 1
+fi
+
+exec ${ELECTRON_BIN} -r "${PATCH}" "${APP}" --no-sandbox --ozone-platform-hint=auto "$@"
+EOF
+    chmod +x "$pkgdir/usr/bin/eagle"
+
+    # Desktop entry & icons
+    install -d "$pkgdir/usr/share/applications"
+    install -d "$pkgdir/usr/share/icons/hicolor/512x512/apps"
+    install -d "$pkgdir/usr/share/pixmaps"
+
+    install -Dm644 "$REPO_DIR/app/assets/icon.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/eagle.png"
+    install -Dm644 "$REPO_DIR/app/assets/icon.png" "$pkgdir/usr/share/pixmaps/eagle.png"
+
+    cat << 'EOF' > "$pkgdir/usr/share/applications/eagle.desktop"
+[Desktop Entry]
+Categories=Graphics;Utility;
+Comment=Digital asset manager for designers
+Exec=eagle %u
+Icon=eagle
+MimeType=application/x-eaglepack;application/x-eagleplugin;application/x-eaglelibrary;x-scheme-handler/eagle;
+Name=Eagle
+StartupNotify=true
+StartupWMClass=Eagle
+Terminal=false
+Type=Application
+Version=1.5
+EOF
+
+    # Install MIME type XML definition
+    install -d "$pkgdir/usr/share/mime/packages"
+    cat << 'EOF' > "$pkgdir/usr/share/mime/packages/eagle.xml"
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-eaglepack">
+    <comment>Eagle Pack</comment>
+    <glob pattern="*.eaglepack"/>
+    <icon name="application-x-eaglepack"/>
+  </mime-type>
+
+  <mime-type type="application/x-eagleplugin">
+    <comment>Eagle Plugin</comment>
+    <glob pattern="*.eagleplugin"/>
+    <icon name="application-x-eagleplugin"/>
+  </mime-type>
+
+  <mime-type type="application/x-eaglelibrary">
+    <comment>Eagle Library</comment>
+    <glob pattern="*.eagle"/>
+    <icon name="application-x-eaglelibrary"/>
+  </mime-type>
+</mime-info>
+EOF
+
+    # Install udev rule for DMI access (Arch requires /usr/lib/udev/rules.d)
+    install -d "$pkgdir/usr/lib/udev/rules.d"
+    cat << 'EOF' > "$pkgdir/usr/lib/udev/rules.d/99-eagle-dmi.rules"
+SUBSYSTEM=="dmi", KERNEL=="product_uuid", MODE="0444"
+EOF
+}
