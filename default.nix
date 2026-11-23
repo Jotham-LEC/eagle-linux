@@ -1,6 +1,11 @@
 { pkgs ? import <nixpkgs> { config.allowUnfree = true; }
 , enableAiSearch ? false # pulls in torch; also lets ai-search.js rewrite downloaded plugin code
 , gpuBackend ? "cpu" # Options: "cuda" (NVIDIA NVENC/CUDA), "rocm" (AMD ROCm), "cpu" (CPU-only)
+  # "auto": native Wayland on Wayland sessions, needed for drag-out on KWin.
+  # "x11": XWayland. Chromium 108's Wayland window code can crash the main
+  # process on a compositor configure (views::View::UpdateChildLayerBounds),
+  # seen on Sway while plugin service windows were recreated.
+, ozonePlatform ? "auto"
 }:
 
 let
@@ -349,7 +354,7 @@ EOF
       ln -sf ${electron22}/libexec/electron/electron "$out/share/eagle/electron/electron"
 
       makeWrapper ${electron22}/bin/electron "$out/bin/eagle" \
-        --add-flags "-r $out/share/eagle/patch.js $out/share/eagle/app --ozone-platform-hint=auto" \
+        --add-flags "-r $out/share/eagle/patch.js $out/share/eagle/app ${if ozonePlatform == "auto" then "--ozone-platform-hint=auto" else "--ozone-platform=${ozonePlatform}"}" \
         --set GTK_USE_PORTAL "1" ${pkgs.lib.optionalString enableAiSearch "--set EAGLE_LINUX_AI_SEARCH 1"} \
         --prefix NODE_PATH : "$out/share/eagle/app/node_modules" \
         --prefix XDG_DATA_DIRS : "${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}" \
