@@ -13,7 +13,25 @@ let
   version = "4.1.0";
   appname = "Eagle";
 
+  # AI Search's text embedder imports model2vec (StaticModel); nixpkgs has no
+  # package for it. Pure Python, so the published wheel is enough.
+  model2vec = ps: ps.buildPythonPackage rec {
+    pname = "model2vec";
+    version = "0.10.0";
+    format = "wheel";
+    src = pkgs.fetchPypi {
+      inherit pname version;
+      format = "wheel";
+      dist = "py3";
+      python = "py3";
+      hash = "sha256-o5xA3k+CxeDlDBS7uHqTXBxiCU8/Dw2P3o4k9KTzWxY=";
+    };
+    dependencies = with ps; [ huggingface-hub jinja2 joblib numpy safetensors tokenizers tqdm ];
+    pythonImportsCheck = [ "model2vec" ];
+  };
+
   pythonPackages = ps: with ps; [
+    (model2vec ps)
     fastapi
     uvicorn
     python-multipart
