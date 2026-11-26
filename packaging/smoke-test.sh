@@ -44,7 +44,9 @@ if [ -n "$SHARE" ]; then
     fi
     # the XDG screenshot patch must have survived packaging
     sc="$SHARE/app/app/js/lib/api/screen-capture.js"
-    if [ -f "$sc" ] && grep -q "portal" "$sc" 2>/dev/null; then
+    # This fork patches screen-capture.js in place (pristine-patches.js) to call
+    # patches/linux-screenshot.js, which talks to the XDG Screenshot portal.
+    if [ -f "$sc" ] && grep -q -e "portal" -e "linux-screenshot.js" "$sc" 2>/dev/null; then
         ok "XDG screen-capture patch present"
     else
         bad "screen-capture.js is missing the XDG portal patch (app_patches not applied)"

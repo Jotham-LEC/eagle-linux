@@ -38,3 +38,5 @@ old/
 *.log
 scratch/
 notes/
+# left in the repo root by ensure-extracted-app.sh
+/app.asar

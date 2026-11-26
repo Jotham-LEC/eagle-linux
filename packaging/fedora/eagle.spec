@@ -25,8 +25,11 @@ Source4:        ensure-electron.sh
 Source5:        eagle.metainfo.xml
 Source6:        patches.tar.gz
 Source7:        app_patches.tar.gz
+# Edits Eagle's own files in place and tamper-checks the rest; run by
+# ensure-extracted-app.sh after extraction, so it must travel in the SRPM.
+Source8:        pristine-patches.js
 
-BuildRequires:  python3, curl, bash, unzip, patchelf
+BuildRequires:  python3, curl, bash, unzip, patchelf, nodejs
 Requires:       python3, zstd, xdotool, ffmpeg, exiv2, dbus-tools
 
 %description
@@ -51,7 +54,10 @@ SRC_DIR="%{_sourcedir}"
 # Without this the package builds happily and ships upstream's Windows
 # screen-capture.js, so screenshots silently do not work.
 tar -xzf %{SOURCE7} -C "${SRC_DIR}"
-if [ ! -f "${SRC_DIR}/app_patches/app/js/lib/api/screen-capture.js" ]; then
+# This fork ships no app/ overlay: Eagle's own files (screen-capture.js among
+# them) are edited in place by pristine-patches.js, which ensure-extracted-app.sh
+# runs and tamper-checks. So require the directory, not upstream's overlay file.
+if [ ! -d "${SRC_DIR}/app_patches" ]; then
     echo "[ERROR] app_patches did not unpack from %{SOURCE7}"
     exit 1
 fi
